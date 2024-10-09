@@ -1,47 +1,63 @@
 <?php
-declare(strict_types=1);
 session_start();
 
-$provider = []; //arry to store the form data
-$errors = []; //arry to store the error messages
+require_once __DIR__ . '/classes/ProviderRepository.php';
+require_once __DIR__ . '/classes/Provider.php';
+
+$provider = new Provider(); //object to store the form data
+$errors = []; //array to store the error messages
+$opMsg = ''; //operation message
+
+if ($_SERVER["REQUEST_METHOD"] == "GET") {
+    if (!empty($_REQUEST["id"])) {
+        $provider = ProviderRepository::select($_REQUEST['id']);
+    }
+}
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $provider['name'] = trim(strip_tags($_POST['name']));
-    $provider['email'] = trim(strip_tags($_POST['email']));
-    $provider['cif'] = trim(strip_tags($_POST['cif']));
+    $provider->setId((int) $_POST['id']);
+    $provider->setName(trim(strip_tags($_POST['name'])));
+    $provider->setEmail(trim(strip_tags($_POST['email'])));
+    $provider->setCif(trim(strip_tags($_POST['cif'])));
 
-    $_SESSION['provider'] = $provider;
-
-    $errors = validateProvider($provider);
+    $errors = $provider->validate();
 
     if (empty($errors)) {
-        header("Location:show_provider.php");
-    }
+        if(isset($_POST['save'])) {
+            if ($provider->getId() == 0) {
+                //New provider
+                try {
+                    $id = ProviderRepository::insert($provider);
+                    if ($id) {
+                        $opMsg = "New provider inserted with id $id";
+                        $provider = new Provider(); //If no errors, make a new empty provider to clear the fields
+                    }
+                } catch (Exception $e) {
+                    echo "Error inserting provider: " . $e->getMessage();
+                }
+            } else {
+                //Update provider
+                try {
+                    ProviderRepository::update($provider);
+                    $opMsg = "Provider updated";
+                    $provider = new Provider();
+                } catch (Exception $e) {
+                    echo "Error updating provider: " . $e->getMessage();
+                }
+            }
+        }
 
+        if (isset($_POST['delete']) && $provider->getId() != 0) {
+            try {
+                ProviderRepository::delete($provider);
+                $opMsg = "Provider deleted";
+                $provider = new Provider();
+            } catch (Exception $e) {
+                echo "Error deleting provider: " . $e->getMessage();
+            }
+        }
+    }
 }  //end of POST
-
-function validateProvider(array $provider): array {
-    $errors = [];
-    if (empty($provider['name'])) {
-        $errors['name'] = "* Name is required";
-    } elseif (strlen($provider['name']) < 4) {
-        $errors['name'] = "* Name must be at least 4 characters long";
-    }
-
-    if(empty($provider['email'])) {
-        $errors['email'] = "* Email is required";
-    } elseif (!filter_var($provider['email'], FILTER_VALIDATE_EMAIL)) {
-        $errors['email'] = "* Invalid email format";
-    }
-
-    if(empty($provider['cif'])) {
-        $errors['cif'] = "* CIF is required";
-    } elseif (!preg_match("/^[A-Z a-z]{1}[0-9]{8}$/", $provider['cif'])) {
-        $errors['cif'] = "* Invalid CIF format";
-    }
-
-    return $errors;
-}
 
 ?>
 
@@ -55,22 +71,27 @@ function validateProvider(array $provider): array {
     <link rel="stylesheet" type="text/css" href="./main.css">
 </head>
 <body>
-<h1>Provider</h1>
+<h1>Edit Provider</h1>
+<p> <?= $opMsg ?> </p>
 
 <form method="post" action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]);?>">
+    <label for="id">Id:</label>
+    <input type="text" id="id" name="id" value="<?= $provider->getId() ?? '' ?>" readonly>
+
     <label for="name">Name:</label>
-    <input type="text" id="name" name="name" value="<?= $provider['name'] ?? '' ?>">
+    <input type="text" id="name" name="name" value="<?= $provider->getName() ?? '' ?>">
     <span class="error"> <?= $errors['name'] ?? '' ?> </span> <br><br>
 
     <label for="email">Email:</label>
-    <input type="text" id="email" name="email" value="<?= $provider['email'] ?? '' ?>">
+    <input type="text" id="email" name="email" value="<?= $provider->getEmail() ?? '' ?>">
     <span class="error"> <?= $errors['email'] ?? '' ?> </span> <br><br>
 
     <label for="cif">CIF:</label>
-    <input type="text" id="cif" name="cif" value="<?= $provider['cif'] ?? '' ?>">
+    <input type="text" id="cif" name="cif" value="<?= $provider->getCif() ?? '' ?>">
     <span class="error"> <?= $errors['cif'] ?? '' ?> </span><br><br>
 
-    <input type="submit" value="Submit">
+    <input type="submit" value="Save" name="save">
+    <input type="submit" value="Delete" name="delete" <?= $provider->getId() == 0 ? 'disabled' : '' ?> >
 </form>
 
 </body>
